@@ -30,12 +30,14 @@ export class InputState {
     window.addEventListener(
       "keydown",
       (event) => {
-        if (isEditableTarget(event.target)) return;
-
         if (
-          document.pointerLockElement === this.pointerElement &&
-          BLOCKED_BROWSER_KEYS.has(event.code)
+          isEditableTarget(event.target) ||
+          document.pointerLockElement !== this.pointerElement
         ) {
+          return;
+        }
+
+        if (BLOCKED_BROWSER_KEYS.has(event.code)) {
           event.preventDefault();
         }
 
