@@ -21,14 +21,20 @@ export function loadLastLocation(storage = localStorage) {
 }
 
 export function saveLastLocation(location, storage = localStorage) {
-  if (!isValidLocation(location)) return;
+  if (!isValidLocation(location)) return false;
 
-  storage.setItem(
-    STORAGE_KEYS.lastLocation,
-    JSON.stringify({
-      latitude: location.latitude,
-      longitude: location.longitude,
-      label: location.label ?? "保存地点",
-    }),
-  );
+  try {
+    storage.setItem(
+      STORAGE_KEYS.lastLocation,
+      JSON.stringify({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        label: location.label ?? "保存地点",
+      }),
+    );
+    return true;
+  } catch (error) {
+    console.warn("The current location could not be saved.", error);
+    return false;
+  }
 }
