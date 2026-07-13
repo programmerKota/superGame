@@ -1,7 +1,7 @@
 {
   "name": "supergame",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@zip.js/zip.js": "2.7.70",
     "cesium": "1.132.0"
   },
   "devDependencies": {
