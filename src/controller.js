@@ -47,6 +47,17 @@ function axisValue(input, positiveCodes, negativeCodes) {
   );
 }
 
+function isValidCoordinate(latitude, longitude) {
+  return (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180
+  );
+}
+
 function nearestPointIndex(points, position) {
   let bestIndex = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -97,6 +108,7 @@ export class WorldController {
     this.trainDistance = 0;
 
     this.lastGroundUpdate = 0;
+    this.teleportVersion = 0;
     this.disposed = false;
 
     this.viewer.scene.screenSpaceCameraController.enableInputs = false;
@@ -104,15 +116,28 @@ export class WorldController {
 
   dispose() {
     this.disposed = true;
+    this.teleportVersion += 1;
     this.input.dispose();
   }
 
   async teleport(latitude, longitude, { heading = this.heading } = {}) {
+    if (!isValidCoordinate(latitude, longitude)) {
+      throw new Error("移動先の緯度・経度が不正です");
+    }
+
+    const version = ++this.teleportVersion;
+    const wasTrainMode = this.mode === "train";
+
     this.latitude = latitude;
     this.longitude = longitude;
     this.heading = heading;
     this.trainRoute = null;
     this.#resetMotion();
+
+    if (wasTrainMode) {
+      this.mode = "walk";
+      this.onModeChange(this.mode);
+    }
 
     const cartographic = Cartographic.fromDegrees(longitude, latitude);
     let sampledHeight = this.viewer.scene.globe.getHeight(cartographic);
@@ -127,8 +152,13 @@ export class WorldController {
       console.debug("Detailed terrain sampling is unavailable.", error);
     }
 
+    if (this.disposed || version !== this.teleportVersion) {
+      return false;
+    }
+
     this.groundHeight = Number.isFinite(sampledHeight) ? sampledHeight : 0;
     this.#syncCamera();
+    return true;
   }
 
   setMode(mode) {
