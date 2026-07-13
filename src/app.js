@@ -19,6 +19,8 @@ export class GameApp {
     this.lastHudRefresh = 0;
     this.lastPositionSave = 0;
     this.railRequest = null;
+    this.hasEnteredWorld = false;
+    this.isTransitioning = false;
   }
 
   async start() {
@@ -50,6 +52,7 @@ export class GameApp {
 
     if (this.frameRequest !== null) {
       cancelAnimationFrame(this.frameRequest);
+      this.frameRequest = null;
     }
   }
 
@@ -64,17 +67,29 @@ export class GameApp {
 
   #bindEvents() {
     this.ui.onStart(() => {
+      this.hasEnteredWorld = true;
       this.ui.setOverlayVisible(false);
-      this.#requestPointerControl();
+      void this.#requestPointerControl();
     });
 
-    this.ui.onModeSelect((mode) => this.#activateMode(mode));
-    this.ui.onPresetSelect((location) => this.#travelTo(location));
-    this.ui.onLocationSubmit((query) => this.#searchAndTravel(query));
+    this.ui.onModeSelect((mode) => {
+      void this.#activateMode(mode);
+    });
+
+    this.ui.onPresetSelect((location) => {
+      void this.#travelTo(location).catch((error) => this.#reportError(error));
+    });
+
+    this.ui.onLocationSubmit((query) => {
+      void this.#searchAndTravel(query);
+    });
 
     this.viewer.canvas.addEventListener("click", () => {
-      if (document.pointerLockElement !== this.viewer.canvas) {
-        this.#requestPointerControl();
+      if (
+        this.hasEnteredWorld &&
+        document.pointerLockElement !== this.viewer.canvas
+      ) {
+        void this.#requestPointerControl();
       }
     });
 
@@ -82,7 +97,7 @@ export class GameApp {
       const isPlaying = document.pointerLockElement === this.viewer.canvas;
       this.ui.setPlaying(isPlaying);
 
-      if (!isPlaying) {
+      if (this.hasEnteredWorld && !isPlaying && !this.isTransitioning) {
         this.ui.setStatus("操作停止中：画面をクリックすると再開します");
       }
     });
@@ -91,12 +106,14 @@ export class GameApp {
       if (event.repeat || this.#isTextInput(event.target)) return;
 
       const mode = MODE_SHORTCUTS[event.code];
-      if (mode) this.#activateMode(mode);
+      if (mode) void this.#activateMode(mode);
     });
   }
 
   #isTextInput(target) {
-    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+    return (
+      target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+    );
   }
 
   async #requestPointerControl() {
@@ -126,34 +143,38 @@ export class GameApp {
         ? "徒歩モード：WASDで移動、Spaceでジャンプ"
         : "車モード：W/Sで加減速、A/Dで操舵、Spaceでブレーキ",
     );
-    this.#requestPointerControl();
+    void this.#requestPointerControl();
   }
 
   async #activateTrainMode() {
     this.railRequest?.abort();
-    this.railRequest = new AbortController();
+    const request = new AbortController();
+    this.railRequest = request;
 
     const state = this.controller.getState();
     this.ui.setStatus("周辺の実在線路を取得しています…");
 
     try {
       const route = await loadNearestRailRoute(state.latitude, state.longitude, {
-        signal: this.railRequest.signal,
+        signal: request.signal,
       });
+
+      if (request.signal.aborted) return;
 
       this.controller.setRailRoute(route);
       this.controller.setMode("train");
       this.ui.setStatus(
         `電車モード：${route.name}（W/Sで加減速、Spaceで制動）`,
       );
-      this.#requestPointerControl();
+      void this.#requestPointerControl();
     } catch (error) {
-      if (error.name === "AbortError") return;
-
-      console.error(error);
-      this.ui.setStatus(error.message, "error");
+      if (error.name !== "AbortError") {
+        this.#reportError(error);
+      }
     } finally {
-      this.railRequest = null;
+      if (this.railRequest === request) {
+        this.railRequest = null;
+      }
     }
   }
 
@@ -165,23 +186,32 @@ export class GameApp {
       await this.#travelTo(location);
       this.ui.clearLocationInput();
     } catch (error) {
-      console.error(error);
-      this.ui.setStatus(error.message, "error");
+      this.#reportError(error);
     }
   }
 
   async #travelTo(location, { persist = true } = {}) {
+    this.isTransitioning = true;
     document.exitPointerLock?.();
     this.railRequest?.abort();
     this.ui.setStatus(`${location.label ?? "指定地点"}へ移動しています…`);
 
-    await this.controller.teleport(location.latitude, location.longitude);
+    try {
+      await this.controller.teleport(location.latitude, location.longitude);
 
-    if (persist) {
-      saveLastLocation(location);
+      if (persist) {
+        saveLastLocation(location);
+      }
+
+      this.ui.setStatus(`${location.label ?? "指定地点"}に到着しました`);
+    } finally {
+      this.isTransitioning = false;
     }
+  }
 
-    this.ui.setStatus(`${location.label ?? "指定地点"}に到着しました`);
+  #reportError(error) {
+    console.error(error);
+    this.ui.setStatus(error?.message ?? "予期しないエラーが発生しました", "error");
   }
 
   #buildReadyMessage(capabilities) {
@@ -195,7 +225,10 @@ export class GameApp {
   }
 
   #tick(now) {
-    const deltaSeconds = Math.min((now - this.previousFrameTime) / 1_000, 0.05);
+    const deltaSeconds = Math.min(
+      (now - this.previousFrameTime) / 1_000,
+      0.05,
+    );
     this.previousFrameTime = now;
 
     this.controller.update(deltaSeconds);
