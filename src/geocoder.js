@@ -14,8 +14,8 @@ function validateCoordinates(latitude, longitude) {
   }
 }
 
-export async function resolveLocation(rawQuery) {
-  const query = rawQuery.trim();
+export async function resolveLocation(rawQuery, { signal } = {}) {
+  const query = String(rawQuery ?? "").trim();
   if (!query) {
     throw new Error("地名または座標を入力してください");
   }
@@ -35,6 +35,7 @@ export async function resolveLocation(rawQuery) {
 
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
+    signal,
   });
 
   if (!response.ok) {
@@ -43,11 +44,13 @@ export async function resolveLocation(rawQuery) {
 
   const payload = await response.json();
   const feature = payload.features?.[0];
-  if (!feature) {
+  const coordinatesFromService = feature?.geometry?.coordinates;
+
+  if (!Array.isArray(coordinatesFromService)) {
     throw new Error("その場所を見つけられませんでした");
   }
 
-  const [longitude, latitude] = feature.geometry.coordinates;
+  const [longitude, latitude] = coordinatesFromService;
   validateCoordinates(latitude, longitude);
 
   const properties = feature.properties ?? {};
