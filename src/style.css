@@ -1,0 +1,401 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #f5f7f8;
+  background: #101820;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --panel-background: rgba(10, 18, 25, 0.78);
+  --panel-border: rgba(255, 255, 255, 0.18);
+  --muted-text: rgba(255, 255, 255, 0.68);
+  --accent: #8fe388;
+  --danger: #ff9b91;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#game {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  user-select: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(143, 227, 136, 0.62);
+  outline-offset: 2px;
+}
+
+canvas {
+  display: block;
+}
+
+.cesium-viewer,
+.cesium-viewer-cesiumWidgetContainer,
+.cesium-widget,
+.cesium-widget canvas {
+  width: 100%;
+  height: 100%;
+}
+
+#hud,
+#location-panel,
+#mode-switcher {
+  position: fixed;
+  z-index: 10;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-background);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+#hud {
+  top: 16px;
+  left: 16px;
+  display: grid;
+  min-width: 280px;
+  gap: 4px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+
+#speed {
+  color: #fff;
+  font-size: 14px;
+}
+
+#route-info {
+  color: #e5d7ff;
+}
+
+#status {
+  color: #b8e7ff;
+}
+
+#status[data-type="error"] {
+  color: var(--danger);
+}
+
+#location-panel {
+  top: 16px;
+  right: 16px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 10px;
+  border-radius: 14px;
+}
+
+#location-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+#location-input {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 0 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#location-input::placeholder {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+#location-form button,
+#presets button {
+  border-radius: 10px;
+  color: #f6f8f8;
+  background: rgba(255, 255, 255, 0.1);
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+#location-form button {
+  min-width: 72px;
+  padding: 0 16px;
+  font-weight: 800;
+}
+
+#presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#presets button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#location-form button:hover,
+#presets button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+#mode-switcher {
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  padding: 7px;
+  border-radius: 15px;
+  transform: translateX(-50%);
+}
+
+#mode-switcher button {
+  position: relative;
+  min-width: 96px;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 14px 0 29px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 800;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+#mode-switcher button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+#mode-switcher button.active {
+  border-color: rgba(143, 227, 136, 0.72);
+  color: #10200e;
+  background: var(--accent);
+}
+
+.mode-key {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.62);
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 10px;
+}
+
+#mode-switcher button.active .mode-key {
+  color: #fff;
+}
+
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 9;
+  width: 18px;
+  height: 18px;
+  opacity: 0.28;
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+body.is-playing #crosshair {
+  opacity: 1;
+}
+
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.95);
+}
+
+#crosshair::before {
+  top: 8px;
+  left: 1px;
+  width: 16px;
+  height: 2px;
+}
+
+#crosshair::after {
+  top: 1px;
+  left: 8px;
+  width: 2px;
+  height: 16px;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(rgba(18, 31, 43, 0.3), rgba(9, 17, 24, 0.65)),
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.2), transparent 42%);
+  backdrop-filter: blur(5px);
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+.panel {
+  width: min(590px, 100%);
+  padding: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 22px;
+  background: rgba(10, 18, 26, 0.84);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+}
+
+.eyebrow {
+  margin: 0 0 9px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+h1 {
+  margin: 0 0 16px;
+  font-size: clamp(32px, 7vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.panel > p:not(.eyebrow) {
+  margin: 0 0 25px;
+  color: rgba(255, 255, 255, 0.79);
+  line-height: 1.75;
+}
+
+.primary {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 14px;
+  color: #10200e;
+  background: var(--accent);
+  font-size: 17px;
+  font-weight: 900;
+  transition:
+    filter 120ms ease,
+    transform 120ms ease;
+}
+
+.primary:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin-top: 23px;
+  color: var(--muted-text);
+  font-size: 13px;
+}
+
+.panel .data-note {
+  margin: 22px 0 0;
+  padding-top: 17px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.53);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.cesium-viewer-bottom {
+  bottom: 3px;
+}
+
+@media (max-width: 780px) {
+  #hud {
+    top: 10px;
+    left: 10px;
+    min-width: 0;
+    max-width: calc(100vw - 20px);
+  }
+
+  #location-panel {
+    top: auto;
+    right: 10px;
+    bottom: 88px;
+    left: 10px;
+    width: auto;
+  }
+
+  #mode-switcher {
+    bottom: 12px;
+  }
+
+  #mode-switcher button {
+    min-width: 82px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 520px) {
+  .panel {
+    padding: 25px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  #location-form {
+    grid-template-columns: 1fr 64px;
+  }
+
+  #mode-switcher {
+    width: calc(100vw - 20px);
+  }
+
+  #mode-switcher button {
+    flex: 1;
+    min-width: 0;
+    padding-right: 7px;
+    padding-left: 25px;
+  }
+}
