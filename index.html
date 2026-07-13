@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7ec8ff" />
+    <title>SuperGame Voxel World</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="game"></div>
+
+    <div id="crosshair" aria-hidden="true"></div>
+
+    <div id="hud">
+      <div id="coordinates">X 0 / Y 0 / Z 0</div>
+      <div id="status">チャンクを生成中…</div>
+    </div>
+
+    <div id="hotbar" aria-label="ブロック選択"></div>
+
+    <div id="overlay">
+      <div class="panel">
+        <p class="eyebrow">SUPERGAME</p>
+        <h1>Voxel Open World</h1>
+        <p>
+          自動生成される世界を歩き、地形を掘り、好きな場所にブロックを置けます。
+        </p>
+        <button id="start-button" type="button">世界に入る</button>
+        <div class="controls">
+          <span>WASD：移動</span>
+          <span>Shift：走る</span>
+          <span>Space：ジャンプ</span>
+          <span>左クリック：破壊</span>
+          <span>右クリック：設置</span>
+          <span>1〜6：ブロック選択</span>
+          <span>Esc：マウス解除</span>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
