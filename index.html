@@ -3,40 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#7ec8ff" />
-    <title>SuperGame Voxel World</title>
+    <meta name="theme-color" content="#101820" />
+    <title>SuperGame — Real World</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="game"></div>
+    <main id="game" aria-label="3D地球"></main>
 
     <div id="crosshair" aria-hidden="true"></div>
 
-    <div id="hud">
-      <div id="coordinates">X 0 / Y 0 / Z 0</div>
-      <div id="status">チャンクを生成中…</div>
-    </div>
+    <section id="hud" aria-live="polite">
+      <div id="coordinates">緯度 -- / 経度 -- / 高度 --</div>
+      <div id="status">世界を初期化しています…</div>
+    </section>
 
-    <div id="hotbar" aria-label="ブロック選択"></div>
+    <section id="location-panel" aria-label="場所を移動">
+      <form id="location-form">
+        <input
+          id="location-input"
+          name="location"
+          type="search"
+          autocomplete="off"
+          placeholder="地名 または 緯度,経度"
+          aria-label="地名または座標"
+        />
+        <button type="submit">移動</button>
+      </form>
+      <div id="presets">
+        <button type="button" data-lat="35.681236" data-lon="139.767125">東京</button>
+        <button type="button" data-lat="35.360625" data-lon="138.727363">富士山</button>
+        <button type="button" data-lat="40.758000" data-lon="-73.985500">NY</button>
+        <button type="button" data-lat="48.858370" data-lon="2.294481">パリ</button>
+      </div>
+    </section>
 
     <div id="overlay">
-      <div class="panel">
-        <p class="eyebrow">SUPERGAME</p>
-        <h1>Voxel Open World</h1>
+      <section class="panel">
+        <p class="eyebrow">SUPERGAME / REAL WORLD</p>
+        <h1>現実世界を、歩けるゲームへ。</h1>
         <p>
-          自動生成される世界を歩き、地形を掘り、好きな場所にブロックを置けます。
+          実在する地球、地形、道路、建物をストリーミングし、任意地点を一人称で探索します。
         </p>
-        <button id="start-button" type="button">世界に入る</button>
+        <button id="start-button" class="primary" type="button">世界に入る</button>
         <div class="controls">
           <span>WASD：移動</span>
           <span>Shift：走る</span>
           <span>Space：ジャンプ</span>
-          <span>左クリック：破壊</span>
-          <span>右クリック：設置</span>
-          <span>1〜6：ブロック選択</span>
-          <span>Esc：マウス解除</span>
+          <span>マウス：視点</span>
+          <span>Esc：操作解除</span>
+          <span>地名検索：瞬間移動</span>
         </div>
-      </div>
+        <p id="data-note" class="data-note">
+          Cesium ionトークン未設定時は、地球画像と平面地形で起動します。
+        </p>
+      </section>
     </div>
 
     <script type="module" src="/src/main.js"></script>
