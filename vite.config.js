@@ -7,7 +7,7 @@ const CESIUM_OUTPUT_DIRECTORY = "cesiumStatic";
 export default defineConfig({
   base: "./",
   define: {
-    CESIUM_BASE_URL: JSON.stringify(`./${CESIUM_OUTPUT_DIRECTORY}`),
+    CESIUM_BASE_URL: JSON.stringify(`./${CESIUM_OUTPUT_DIRECTORY}/`),
   },
   plugins: [
     viteStaticCopy({
