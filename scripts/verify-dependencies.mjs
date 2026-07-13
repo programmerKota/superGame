@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 const require = createRequire(import.meta.url);
 const EXPECTED_VERSIONS = Object.freeze({
@@ -12,19 +13,38 @@ const EXPECTED_VERSIONS = Object.freeze({
   "vite-plugin-static-copy": "2.3.2",
 });
 
-async function readInstalledVersion(packageName) {
-  const packagePath = require.resolve(`${packageName}/package.json`);
-  const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
-  return packageJson.version;
+async function readInstalledPackage(packageName) {
+  let directory = dirname(require.resolve(packageName));
+
+  while (true) {
+    const packagePath = join(directory, "package.json");
+
+    try {
+      const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
+      if (packageJson.name === packageName) return packageJson;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+
+    const parent = dirname(directory);
+    if (parent === directory) {
+      throw new Error(`Could not locate package.json for ${packageName}.`);
+    }
+    directory = parent;
+  }
 }
 
 const mismatches = [];
 
 for (const [packageName, expectedVersion] of Object.entries(EXPECTED_VERSIONS)) {
-  const installedVersion = await readInstalledVersion(packageName);
+  const installedPackage = await readInstalledPackage(packageName);
 
-  if (installedVersion !== expectedVersion) {
-    mismatches.push({ packageName, expectedVersion, installedVersion });
+  if (installedPackage.version !== expectedVersion) {
+    mismatches.push({
+      packageName,
+      expectedVersion,
+      installedVersion: installedPackage.version,
+    });
   }
 }
 
