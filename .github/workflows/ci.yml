@@ -1,4 +1,4 @@
-name: CI
+name: Release validation
 
 on:
   push:
@@ -9,13 +9,18 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
-  test-and-build:
+  validate:
+    name: Unit, build, and browser tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
@@ -26,11 +31,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install exact dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Run unit tests
-        run: npm test
+      - name: Validate source and dependency graph
+        run: npm run check
 
-      - name: Build production bundle
-        run: npm run build
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and run browser tests
+        run: npm run test:e2e
+
+      - name: Upload browser test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
