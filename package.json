@@ -1,16 +1,16 @@
 {
   "name": "supergame",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "cesium": "^1.132.0",
-    "three": "^0.180.0"
+    "cesium": "^1.132.0"
   },
   "devDependencies": {
     "vite": "^7.0.0",
