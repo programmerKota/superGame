@@ -1,3 +1,5 @@
+import { distanceMeters } from "./geo.js";
+
 const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
@@ -5,30 +7,7 @@ const OVERPASS_ENDPOINTS = [
 
 const RAIL_FILTER = "rail|light_rail|subway|tram|narrow_gauge";
 const CONNECT_DISTANCE_METERS = 45;
-const EARTH_RADIUS_METERS = 6_371_008.8;
-
-function toRadians(value) {
-  return (value * Math.PI) / 180;
-}
-
-export function distanceMeters(a, b) {
-  const latitude1 = toRadians(a.latitude);
-  const latitude2 = toRadians(b.latitude);
-  const latitudeDelta = latitude2 - latitude1;
-  const longitudeDelta = toRadians(b.longitude - a.longitude);
-
-  const haversine =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(latitude1) *
-      Math.cos(latitude2) *
-      Math.sin(longitudeDelta / 2) ** 2;
-
-  return (
-    2 *
-    EARTH_RADIUS_METERS *
-    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-  );
-}
+const MAX_CONNECTED_WAYS = 80;
 
 function normalizeWay(element) {
   const points = element.geometry?.map(({ lat, lon }) => ({
@@ -54,55 +33,71 @@ function nearestPointDistance(way, origin) {
   );
 }
 
-function endpoints(way) {
+function getEndpoints(way) {
   return {
     start: way.points[0],
-    end: way.points[way.points.length - 1],
+    end: way.points.at(-1),
   };
+}
+
+function getConnectionCandidates(route, way) {
+  const routeStart = route[0];
+  const routeEnd = route.at(-1);
+  const { start, end } = getEndpoints(way);
+
+  return [
+    { distance: distanceMeters(routeEnd, start), placement: "append" },
+    {
+      distance: distanceMeters(routeEnd, end),
+      placement: "append-reverse",
+    },
+    { distance: distanceMeters(routeStart, end), placement: "prepend" },
+    {
+      distance: distanceMeters(routeStart, start),
+      placement: "prepend-reverse",
+    },
+  ];
+}
+
+function findBestConnection(route, candidates, usedWayIds) {
+  let bestConnection = null;
+
+  for (const way of candidates) {
+    if (usedWayIds.has(way.id)) continue;
+
+    for (const candidate of getConnectionCandidates(route, way)) {
+      const isCloser =
+        !bestConnection || candidate.distance < bestConnection.distance;
+
+      if (candidate.distance <= CONNECT_DISTANCE_METERS && isCloser) {
+        bestConnection = { ...candidate, way };
+      }
+    }
+  }
+
+  return bestConnection;
 }
 
 function connectWays(seed, candidates) {
   const route = [...seed.points];
-  const used = new Set([seed.id]);
+  const usedWayIds = new Set([seed.id]);
 
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    let best = null;
+  for (let count = 1; count < MAX_CONNECTED_WAYS; count += 1) {
+    const connection = findBestConnection(route, candidates, usedWayIds);
+    if (!connection) break;
 
-    for (const way of candidates) {
-      if (used.has(way.id)) continue;
-
-      const routeStart = route[0];
-      const routeEnd = route[route.length - 1];
-      const { start, end } = endpoints(way);
-      const matches = [
-        { distance: distanceMeters(routeEnd, start), placement: "append" },
-        { distance: distanceMeters(routeEnd, end), placement: "append-reverse" },
-        { distance: distanceMeters(routeStart, end), placement: "prepend" },
-        { distance: distanceMeters(routeStart, start), placement: "prepend-reverse" },
-      ];
-
-      for (const match of matches) {
-        if (
-          match.distance <= CONNECT_DISTANCE_METERS &&
-          (!best || match.distance < best.distance)
-        ) {
-          best = { ...match, way };
-        }
-      }
+    const points = [...connection.way.points];
+    if (connection.placement.endsWith("reverse")) {
+      points.reverse();
     }
 
-    if (!best) break;
-
-    const points = [...best.way.points];
-    if (best.placement.endsWith("reverse")) points.reverse();
-
-    if (best.placement.startsWith("append")) {
+    if (connection.placement.startsWith("append")) {
       route.push(...points.slice(1));
     } else {
       route.unshift(...points.slice(0, -1));
     }
 
-    used.add(best.way.id);
+    usedWayIds.add(connection.way.id);
   }
 
   return route;
@@ -143,9 +138,8 @@ async function requestOverpass(query, signal) {
     }
   }
 
-  throw new Error(
-    `線路データを取得できませんでした${lastError ? `: ${lastError.message}` : ""}`,
-  );
+  const details = lastError ? `: ${lastError.message}` : "";
+  throw new Error(`線路データを取得できませんでした${details}`);
 }
 
 export async function loadNearestRailRoute(
@@ -175,14 +169,12 @@ export async function loadNearestRailRoute(
     throw new Error("走行可能な線路形状を構築できませんでした");
   }
 
-  const name =
-    seed.tags.name ||
-    seed.tags["name:ja"] ||
-    seed.tags.operator ||
-    "名称不明の線路";
-
   return {
-    name,
+    name:
+      seed.tags["name:ja"] ||
+      seed.tags.name ||
+      seed.tags.operator ||
+      "名称不明の線路",
     points,
     source: "OpenStreetMap / Overpass",
   };
