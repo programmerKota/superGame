@@ -9,8 +9,8 @@ const REQUIRED_SELECTORS = {
   locationInput: "#location-input",
 };
 
-function queryRequired(selector, name) {
-  const element = document.querySelector(selector);
+function queryRequired(root, selector, name) {
+  const element = root.querySelector(selector);
   if (!element) {
     throw new Error(`Required UI element '${name}' was not found (${selector}).`);
   }
@@ -31,10 +31,11 @@ function formatSpeed(value) {
 
 export class GameUi {
   constructor(root = document) {
+    this.root = root;
     this.elements = Object.fromEntries(
       Object.entries(REQUIRED_SELECTORS).map(([name, selector]) => [
         name,
-        queryRequired(selector, name),
+        queryRequired(root, selector, name),
       ]),
     );
 
