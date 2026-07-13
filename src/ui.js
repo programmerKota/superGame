@@ -93,32 +93,44 @@ export class GameUi {
     return this.elements.locationInput.value;
   }
 
-  onStart(handler) {
-    this.elements.startButton.addEventListener("click", handler);
+  onStart(handler, options) {
+    this.elements.startButton.addEventListener("click", handler, options);
   }
 
-  onLocationSubmit(handler) {
-    this.elements.locationForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      handler(this.getLocationQuery());
-    });
+  onLocationSubmit(handler, options) {
+    this.elements.locationForm.addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        handler(this.getLocationQuery());
+      },
+      options,
+    );
   }
 
-  onModeSelect(handler) {
+  onModeSelect(handler, options) {
     for (const button of this.modeButtons) {
-      button.addEventListener("click", () => handler(button.dataset.mode));
+      button.addEventListener(
+        "click",
+        () => handler(button.dataset.mode),
+        options,
+      );
     }
   }
 
-  onPresetSelect(handler) {
+  onPresetSelect(handler, options) {
     for (const button of this.presetButtons) {
-      button.addEventListener("click", () => {
-        handler({
-          latitude: Number(button.dataset.lat),
-          longitude: Number(button.dataset.lon),
-          label: button.textContent.trim(),
-        });
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          handler({
+            latitude: Number(button.dataset.lat),
+            longitude: Number(button.dataset.lon),
+            label: button.textContent.trim(),
+          });
+        },
+        options,
+      );
     }
   }
 }
