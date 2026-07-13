@@ -6,14 +6,24 @@ import {
   Transforms,
   sampleTerrainMostDetailed,
 } from "cesium";
-import { distanceMeters } from "./rail.js";
+import {
+  bearingRadians,
+  distanceMeters,
+  interpolateCoordinate,
+} from "./geo.js";
+import { InputState } from "./input.js";
 
 const MODES = new Set(["walk", "car", "train"]);
-const EYE_HEIGHT = {
+const EYE_HEIGHT_METERS = Object.freeze({
   walk: 1.72,
   car: 1.55,
   train: 3.2,
-};
+});
+
+const LOOK_SENSITIVITY = Object.freeze({
+  horizontal: 0.0021,
+  vertical: 0.0018,
+});
 
 const scratchOrigin = new Cartesian3();
 const scratchLocal = new Cartesian3();
@@ -30,18 +40,11 @@ function approach(value, target, amount) {
   return target;
 }
 
-function bearingRadians(a, b) {
-  const latitude1 = CesiumMath.toRadians(a.latitude);
-  const latitude2 = CesiumMath.toRadians(b.latitude);
-  const longitudeDelta = CesiumMath.toRadians(b.longitude - a.longitude);
-  const y = Math.sin(longitudeDelta) * Math.cos(latitude2);
-  const x =
-    Math.cos(latitude1) * Math.sin(latitude2) -
-    Math.sin(latitude1) *
-      Math.cos(latitude2) *
-      Math.cos(longitudeDelta);
-
-  return Math.atan2(y, x);
+function axisValue(input, positiveCodes, negativeCodes) {
+  return (
+    Number(input.isPressed(...positiveCodes)) -
+    Number(input.isPressed(...negativeCodes))
+  );
 }
 
 function nearestPointIndex(points, position) {
@@ -59,11 +62,23 @@ function nearestPointIndex(points, position) {
   return bestIndex;
 }
 
+function buildCumulativeDistances(points) {
+  const cumulative = [0];
+
+  for (let index = 1; index < points.length; index += 1) {
+    cumulative.push(
+      cumulative[index - 1] + distanceMeters(points[index - 1], points[index]),
+    );
+  }
+
+  return cumulative;
+}
+
 export class WorldController {
-  constructor(viewer, { onStatus = () => {}, onModeChange = () => {} } = {}) {
+  constructor(viewer, { onModeChange = () => {} } = {}) {
     this.viewer = viewer;
-    this.onStatus = onStatus;
     this.onModeChange = onModeChange;
+    this.input = new InputState(viewer.canvas);
 
     this.mode = "walk";
     this.latitude = 35.681236;
@@ -81,67 +96,23 @@ export class WorldController {
     this.trainRoute = null;
     this.trainDistance = 0;
 
-    this.keys = new Set();
     this.lastGroundUpdate = 0;
     this.disposed = false;
 
     this.viewer.scene.screenSpaceCameraController.enableInputs = false;
-    this.#bindInput();
-  }
-
-  #bindInput() {
-    this.onKeyDown = (event) => {
-      if (
-        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
-          event.code,
-        )
-      ) {
-        event.preventDefault();
-      }
-      this.keys.add(event.code);
-    };
-
-    this.onKeyUp = (event) => {
-      this.keys.delete(event.code);
-    };
-
-    this.onMouseMove = (event) => {
-      if (document.pointerLockElement !== this.viewer.canvas) return;
-
-      if (this.mode !== "train") {
-        this.heading = CesiumMath.zeroToTwoPi(
-          this.heading + event.movementX * 0.0021,
-        );
-      }
-
-      this.pitch = clamp(
-        this.pitch - event.movementY * 0.0018,
-        -1.42,
-        1.05,
-      );
-    };
-
-    window.addEventListener("keydown", this.onKeyDown, { passive: false });
-    window.addEventListener("keyup", this.onKeyUp);
-    document.addEventListener("mousemove", this.onMouseMove);
   }
 
   dispose() {
     this.disposed = true;
-    window.removeEventListener("keydown", this.onKeyDown);
-    window.removeEventListener("keyup", this.onKeyUp);
-    document.removeEventListener("mousemove", this.onMouseMove);
+    this.input.dispose();
   }
 
   async teleport(latitude, longitude, { heading = this.heading } = {}) {
     this.latitude = latitude;
     this.longitude = longitude;
     this.heading = heading;
-    this.jumpOffset = 0;
-    this.verticalVelocity = 0;
-    this.carSpeed = 0;
-    this.trainSpeed = 0;
     this.trainRoute = null;
+    this.#resetMotion();
 
     const cartographic = Cartographic.fromDegrees(longitude, latitude);
     let sampledHeight = this.viewer.scene.globe.getHeight(cartographic);
@@ -181,13 +152,15 @@ export class WorldController {
   }
 
   setRailRoute(route) {
-    const cumulative = [0];
+    if (!Array.isArray(route?.points) || route.points.length < 2) {
+      throw new Error("線路データが不正です");
+    }
 
-    for (let index = 1; index < route.points.length; index += 1) {
-      cumulative.push(
-        cumulative[index - 1] +
-          distanceMeters(route.points[index - 1], route.points[index]),
-      );
+    const cumulative = buildCumulativeDistances(route.points);
+    const lengthMeters = cumulative.at(-1);
+
+    if (!Number.isFinite(lengthMeters) || lengthMeters <= 0) {
+      throw new Error("線路の長さを計算できませんでした");
     }
 
     const nearestIndex = nearestPointIndex(route.points, {
@@ -198,7 +171,7 @@ export class WorldController {
     this.trainRoute = {
       ...route,
       cumulative,
-      lengthMeters: cumulative[cumulative.length - 1],
+      lengthMeters,
     };
     this.trainDistance = cumulative[nearestIndex];
     this.trainSpeed = 0;
@@ -209,47 +182,121 @@ export class WorldController {
     if (this.disposed) return;
 
     const delta = clamp(deltaSeconds, 0, 0.05);
-    if (this.mode === "walk") this.#updateWalk(delta);
-    if (this.mode === "car") this.#updateCar(delta);
-    if (this.mode === "train") this.#updateTrain(delta);
+    this.#updateLook();
+
+    switch (this.mode) {
+      case "walk":
+        this.#updateWalk(delta);
+        break;
+      case "car":
+        this.#updateCar(delta);
+        break;
+      case "train":
+        this.#updateTrain(delta);
+        break;
+      default:
+        break;
+    }
 
     this.#refreshGroundHeight();
     this.#syncCamera();
   }
 
+  getState() {
+    const speedMetersPerSecond =
+      this.mode === "car"
+        ? this.carSpeed
+        : this.mode === "train"
+          ? this.trainSpeed
+          : 0;
+
+    return {
+      mode: this.mode,
+      latitude: this.latitude,
+      longitude: this.longitude,
+      altitude:
+        this.groundHeight + EYE_HEIGHT_METERS[this.mode] + this.jumpOffset,
+      speedKmh: Math.abs(speedMetersPerSecond) * 3.6,
+      routeName: this.trainRoute?.name ?? null,
+      routeProgress:
+        this.trainRoute && this.trainRoute.lengthMeters > 0
+          ? this.trainDistance / this.trainRoute.lengthMeters
+          : null,
+    };
+  }
+
+  #resetMotion() {
+    this.input.clear();
+    this.jumpOffset = 0;
+    this.verticalVelocity = 0;
+    this.jumpLatch = false;
+    this.carSpeed = 0;
+    this.trainSpeed = 0;
+    this.trainDistance = 0;
+  }
+
+  #updateLook() {
+    const look = this.input.consumeLookDelta();
+
+    if (this.mode !== "train") {
+      this.heading = CesiumMath.zeroToTwoPi(
+        this.heading + look.x * LOOK_SENSITIVITY.horizontal,
+      );
+    }
+
+    this.pitch = clamp(
+      this.pitch - look.y * LOOK_SENSITIVITY.vertical,
+      -1.42,
+      1.05,
+    );
+  }
+
   #updateWalk(delta) {
-    const forward =
-      Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
-      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
-    const strafe =
-      Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
-      Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
+    const forward = axisValue(
+      this.input,
+      ["KeyW", "ArrowUp"],
+      ["KeyS", "ArrowDown"],
+    );
+    const strafe = axisValue(
+      this.input,
+      ["KeyD", "ArrowRight"],
+      ["KeyA", "ArrowLeft"],
+    );
 
     const magnitude = Math.hypot(forward, strafe);
     if (magnitude > 0) {
-      const speed = this.keys.has("ShiftLeft") ? 10.5 : 5.2;
+      const isRunning = this.input.isPressed("ShiftLeft", "ShiftRight");
+      const speed = isRunning ? 10.5 : 5.2;
       const normalizedForward = forward / magnitude;
       const normalizedStrafe = strafe / magnitude;
+      const distance = speed * delta;
+
       const east =
         (normalizedForward * Math.sin(this.heading) +
           normalizedStrafe * Math.cos(this.heading)) *
-        speed *
-        delta;
+        distance;
       const north =
         (normalizedForward * Math.cos(this.heading) -
           normalizedStrafe * Math.sin(this.heading)) *
-        speed *
-        delta;
+        distance;
 
       this.#moveAcrossGround(east, north);
     }
 
-    const jumpPressed = this.keys.has("Space");
+    this.#updateJump(delta);
+  }
+
+  #updateJump(delta) {
+    const jumpPressed = this.input.isPressed("Space");
+
     if (jumpPressed && !this.jumpLatch && this.jumpOffset <= 0.001) {
       this.verticalVelocity = 5.3;
       this.jumpLatch = true;
     }
-    if (!jumpPressed) this.jumpLatch = false;
+
+    if (!jumpPressed) {
+      this.jumpLatch = false;
+    }
 
     this.verticalVelocity -= 15.5 * delta;
     this.jumpOffset += this.verticalVelocity * delta;
@@ -261,22 +308,27 @@ export class WorldController {
   }
 
   #updateCar(delta) {
-    const throttle =
-      Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
-      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
-    const steering =
-      Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
-      Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
+    const throttle = axisValue(
+      this.input,
+      ["KeyW", "ArrowUp"],
+      ["KeyS", "ArrowDown"],
+    );
+    const steering = axisValue(
+      this.input,
+      ["KeyD", "ArrowRight"],
+      ["KeyA", "ArrowLeft"],
+    );
 
-    const maximumForwardSpeed = this.keys.has("ShiftLeft") ? 55 : 38;
+    const isFastMode = this.input.isPressed("ShiftLeft", "ShiftRight");
+    const maximumForwardSpeed = isFastMode ? 55 : 38;
     const targetSpeed =
       throttle > 0 ? maximumForwardSpeed : throttle < 0 ? -12 : 0;
 
     if (throttle !== 0) {
-      const changingDirection =
+      const isChangingDirection =
         Math.sign(this.carSpeed) !== 0 &&
         Math.sign(this.carSpeed) !== Math.sign(targetSpeed);
-      const acceleration = changingDirection ? 18 : 8.5;
+      const acceleration = isChangingDirection ? 18 : 8.5;
       this.carSpeed = approach(
         this.carSpeed,
         targetSpeed,
@@ -286,7 +338,7 @@ export class WorldController {
       this.carSpeed = approach(this.carSpeed, 0, 3.2 * delta);
     }
 
-    if (this.keys.has("Space")) {
+    if (this.input.isPressed("Space")) {
       this.carSpeed = approach(this.carSpeed, 0, 28 * delta);
     }
 
@@ -296,6 +348,7 @@ export class WorldController {
       1,
     );
     const directionSign = this.carSpeed < 0 ? -1 : 1;
+
     this.heading = CesiumMath.zeroToTwoPi(
       this.heading + steering * directionSign * (0.32 + speedRatio) * delta,
     );
@@ -310,18 +363,24 @@ export class WorldController {
   #updateTrain(delta) {
     if (!this.trainRoute) return;
 
-    const throttle =
-      Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
-      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
+    const throttle = axisValue(
+      this.input,
+      ["KeyW", "ArrowUp"],
+      ["KeyS", "ArrowDown"],
+    );
 
     if (throttle !== 0) {
-      const target = throttle > 0 ? 70 : -28;
-      this.trainSpeed = approach(this.trainSpeed, target, 1.6 * delta);
+      const targetSpeed = throttle > 0 ? 70 : -28;
+      this.trainSpeed = approach(
+        this.trainSpeed,
+        targetSpeed,
+        1.6 * delta,
+      );
     } else {
       this.trainSpeed = approach(this.trainSpeed, 0, 0.18 * delta);
     }
 
-    if (this.keys.has("Space")) {
+    if (this.input.isPressed("Space")) {
       this.trainSpeed = approach(this.trainSpeed, 0, 12 * delta);
     }
 
@@ -331,10 +390,11 @@ export class WorldController {
       this.trainRoute.lengthMeters,
     );
 
-    if (
+    const isAtRouteEnd =
       this.trainDistance === 0 ||
-      this.trainDistance === this.trainRoute.lengthMeters
-    ) {
+      this.trainDistance === this.trainRoute.lengthMeters;
+
+    if (isAtRouteEnd) {
       this.trainSpeed = 0;
     }
 
@@ -345,34 +405,34 @@ export class WorldController {
     if (!this.trainRoute) return;
 
     const { points, cumulative } = this.trainRoute;
-    let segment = 0;
+    let segmentIndex = 0;
 
     while (
-      segment < cumulative.length - 2 &&
-      cumulative[segment + 1] < this.trainDistance
+      segmentIndex < cumulative.length - 2 &&
+      cumulative[segmentIndex + 1] < this.trainDistance
     ) {
-      segment += 1;
+      segmentIndex += 1;
     }
 
-    const startDistance = cumulative[segment];
-    const endDistance = cumulative[segment + 1];
+    const startDistance = cumulative[segmentIndex];
+    const endDistance = cumulative[segmentIndex + 1];
     const segmentLength = Math.max(0.001, endDistance - startDistance);
     const amount = clamp(
       (this.trainDistance - startDistance) / segmentLength,
       0,
       1,
     );
-    const start = points[segment];
-    const end = points[segment + 1];
+    const start = points[segmentIndex];
+    const end = points[segmentIndex + 1];
+    const position = interpolateCoordinate(start, end, amount);
 
-    this.latitude =
-      start.latitude + (end.latitude - start.latitude) * amount;
-    this.longitude =
-      start.longitude + (end.longitude - start.longitude) * amount;
-    this.heading =
+    this.latitude = position.latitude;
+    this.longitude = position.longitude;
+    this.heading = CesiumMath.zeroToTwoPi(
       this.trainSpeed >= 0
         ? bearingRadians(start, end)
-        : bearingRadians(end, start);
+        : bearingRadians(end, start),
+    );
   }
 
   #moveAcrossGround(eastMeters, northMeters) {
@@ -400,8 +460,8 @@ export class WorldController {
   #refreshGroundHeight() {
     const now = performance.now();
     if (now - this.lastGroundUpdate < 80) return;
-    this.lastGroundUpdate = now;
 
+    this.lastGroundUpdate = now;
     const cartographic = Cartographic.fromDegrees(
       this.longitude,
       this.latitude,
@@ -417,7 +477,7 @@ export class WorldController {
     const destination = Cartesian3.fromDegrees(
       this.longitude,
       this.latitude,
-      this.groundHeight + EYE_HEIGHT[this.mode] + this.jumpOffset,
+      this.groundHeight + EYE_HEIGHT_METERS[this.mode] + this.jumpOffset,
     );
 
     this.viewer.camera.setView({
@@ -428,28 +488,5 @@ export class WorldController {
         roll: 0,
       },
     });
-  }
-
-  getState() {
-    const speedMetersPerSecond =
-      this.mode === "car"
-        ? this.carSpeed
-        : this.mode === "train"
-          ? this.trainSpeed
-          : 0;
-
-    return {
-      mode: this.mode,
-      latitude: this.latitude,
-      longitude: this.longitude,
-      altitude:
-        this.groundHeight + EYE_HEIGHT[this.mode] + this.jumpOffset,
-      speedKmh: Math.abs(speedMetersPerSecond) * 3.6,
-      routeName: this.trainRoute?.name ?? null,
-      routeProgress:
-        this.trainRoute && this.trainRoute.lengthMeters > 0
-          ? this.trainDistance / this.trainRoute.lengthMeters
-          : null,
-    };
   }
 }
