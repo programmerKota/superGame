@@ -12,7 +12,6 @@ const OSM_CREDIT = "© OpenStreetMap contributors";
 export async function createWorld(container, onStatus = () => {}) {
   const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
   const capabilities = {
-    ionTokenConfigured: Boolean(ionToken),
     terrain: false,
     buildings: false,
   };
@@ -33,7 +32,7 @@ export async function createWorld(container, onStatus = () => {}) {
       capabilities.terrain = true;
     } catch (error) {
       console.warn("Cesium World Terrain could not be loaded.", error);
-      onStatus("地形の読込みに失敗したため、平面地球で続行します");
+      onStatus("地形の読込みに失敗したため、標高なし地形で続行します");
     }
   }
 
