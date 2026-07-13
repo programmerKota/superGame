@@ -47,6 +47,8 @@ export class GameApp {
     const initialLocation = loadLastLocation();
     await this.#travelTo(initialLocation, { persist: false });
 
+    if (this.destroyed) return;
+
     this.ui.setActiveMode("walk");
     this.ui.setStatus(this.#buildReadyMessage(capabilities));
     this.previousFrameTime = performance.now();
