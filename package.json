@@ -1,7 +1,7 @@
 {
   "name": "supergame",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,5 +15,8 @@
   "devDependencies": {
     "vite": "6.0.0",
     "vite-plugin-static-copy": "2.3.2"
+  },
+  "overrides": {
+    "@zip.js/zip.js": "2.7.70"
   }
 }
