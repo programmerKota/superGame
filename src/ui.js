@@ -1,4 +1,5 @@
 const REQUIRED_SELECTORS = {
+  game: "#game",
   overlay: "#overlay",
   startButton: "#start-button",
   coordinates: "#coordinates",
@@ -47,6 +48,10 @@ export class GameUi {
     const { status } = this.elements;
     status.textContent = message;
     status.dataset.type = type;
+  }
+
+  setWorldReady(ready = true) {
+    this.elements.game.setAttribute("aria-busy", String(!ready));
   }
 
   setOverlayVisible(visible) {
