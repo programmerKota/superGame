@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101820" />
     <title>SuperGame — Real World</title>
-    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <main id="game" aria-label="3D地球"></main>
@@ -14,8 +13,25 @@
 
     <section id="hud" aria-live="polite">
       <div id="coordinates">緯度 -- / 経度 -- / 高度 --</div>
+      <div id="speed">徒歩 / 0 km/h</div>
+      <div id="route-info" hidden></div>
       <div id="status">世界を初期化しています…</div>
     </section>
+
+    <nav id="mode-switcher" aria-label="移動方法">
+      <button type="button" data-mode="walk" aria-pressed="true">
+        <span class="mode-key">1</span>
+        徒歩
+      </button>
+      <button type="button" data-mode="car" aria-pressed="false">
+        <span class="mode-key">2</span>
+        車
+      </button>
+      <button type="button" data-mode="train" aria-pressed="false">
+        <span class="mode-key">3</span>
+        電車
+      </button>
+    </nav>
 
     <section id="location-panel" aria-label="場所を移動">
       <form id="location-form">
@@ -42,19 +58,19 @@
         <p class="eyebrow">SUPERGAME / REAL WORLD</p>
         <h1>現実世界を、歩けるゲームへ。</h1>
         <p>
-          実在する地球、地形、道路、建物をストリーミングし、任意地点を一人称で探索します。
+          実在する地球、地形、建物、線路を読み込み、徒歩・車・電車で任意地点を探索します。
         </p>
         <button id="start-button" class="primary" type="button">世界に入る</button>
         <div class="controls">
-          <span>WASD：移動</span>
-          <span>Shift：走る</span>
-          <span>Space：ジャンプ</span>
+          <span>WASD：移動・加減速</span>
+          <span>Shift：走る・高速走行</span>
+          <span>Space：ジャンプ・制動</span>
           <span>マウス：視点</span>
+          <span>1 / 2 / 3：移動方法</span>
           <span>Esc：操作解除</span>
-          <span>地名検索：瞬間移動</span>
         </div>
         <p id="data-note" class="data-note">
-          Cesium ionトークン未設定時は、地球画像と平面地形で起動します。
+          Cesium ionトークン未設定時も起動しますが、実在地形と3D建物は簡易表示になります。
         </p>
       </section>
     </div>
