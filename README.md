@@ -41,6 +41,12 @@ npm run dev
 VITE_CESIUM_ION_TOKEN=your_token_here
 ```
 
+テスト:
+
+```bash
+npm test
+```
+
 本番ビルド:
 
 ```bash
